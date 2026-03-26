@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
+
 TOKEN_FILE = os.path.expanduser("~/.claude/long-lived-auth-tokens.txt")
 API_URL = "https://api.anthropic.com/v1/messages"
 
@@ -201,7 +202,7 @@ def select_account(names):
                     selected += 1
             elif key in ("\r", "\n"):  # Enter
                 break
-            elif key in ("q", "Q"):
+            elif key in ("q", "Q", "\x03"):  # q, Q, Ctrl+C
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
                 print("\r\n취소되었습니다.")
                 sys.exit(0)
@@ -217,6 +218,8 @@ def select_account(names):
 
 # ─── Main ────────────────────────────────────────────────────────────
 def main():
+    sys.stdout.write("\033c")
+    sys.stdout.flush()
     names, tokens = load_tokens()
 
     # --usages: 모든 토큰의 usage 표시 후 종료
