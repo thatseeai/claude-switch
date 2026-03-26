@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+import os
+import sys
+import tty
+import termios
+import json
+import urllib.request
+import urllib.error
+from datetime import datetime
+
+TOKEN_FILE = os.path.expanduser("~/.claude/long-lived-auth-tokens.txt")
+API_URL = "https://api.anthropic.com/v1/messages"
+
+
+# ─── Usage ───────────────────────────────────────────────────────────
+def fetch_usage(token):
+    body = json.dumps({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "hi"}],
+    }).encode()
+
+    req = urllib.request.Request(API_URL, data=body, method="POST", headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "oauth-2025-04-20",
+    })
+
+    try:
+        resp = urllib.request.urlopen(req)
+        headers = resp.headers
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return None
+        headers = e.headers
+
+    prefix = "anthropic-ratelimit-"
+    rl_headers = {k: v for k, v in headers.items() if k.lower().startswith(prefix)}
+
+    def get(name):
+        return rl_headers.get(f"anthropic-ratelimit-{name}", "")
+
+    return {
+        "session_utilization": float(get("unified-5h-utilization") or "0"),
+        "session_reset": get("unified-5h-reset") or None,
+        "session_status": get("unified-5h-status") or "unknown",
+        "weekly_utilization": float(get("unified-7d-utilization") or "0"),
+        "weekly_reset": get("unified-7d-reset") or None,
+        "weekly_status": get("unified-7d-status") or "unknown",
+        "overall_status": get("unified-status") or "unknown",
+        "overage_status": get("unified-overage-status") or None,
+    }
+
+
+def progress_bar(ratio, width=20):
+    filled = round(min(ratio, 1) * width)
+    empty = width - filled
+    pct = f"{ratio * 100:.1f}"
+
+    if ratio >= 0.8:
+        color = "\033[31m"  # red
+    elif ratio >= 0.5:
+        color = "\033[33m"  # yellow
+    else:
+        color = "\033[32m"  # green
+
+    reset = "\033[0m"
+    bar = color + "█" * filled + reset + "░" * empty
+    return f"{bar}  {pct}%"
+
+
+def format_reset(reset_value, show_day=False):
+    if not reset_value:
+        return "unknown"
+    try:
+        epoch = int(reset_value)
+        if epoch == 0:
+            return "unknown"
+        dt = datetime.fromtimestamp(epoch)
+        now = datetime.now()
+        diff = dt - now
+
+        if diff.total_seconds() < 0:
+            return "just reset"
+
+        diff_min = int(diff.total_seconds() // 60)
+        diff_hr = diff_min // 60
+        remain_min = diff_min % 60
+
+        time_str = dt.strftime("%-I:%M %p")
+        day_prefix = f"({dt.strftime('%a')}) " if show_day else ""
+
+        if diff_hr > 0:
+            return f"{day_prefix}{time_str} ({diff_hr}h {remain_min}m)"
+        return f"{day_prefix}{time_str} ({diff_min}m)"
+    except (ValueError, OSError):
+        return "unknown"
+
+
+def display_usage(name, data):
+    bold = "\033[1m"
+    dim = "\033[2m"
+    reset = "\033[0m"
+
+    if data is None:
+        print(f"  {bold}{name}{reset}: \033[31mtoken expired\033[0m")
+        return
+
+    status = data["overall_status"]
+    if status == "rate_limited":
+        status_color = "\033[31m"
+    elif status == "warning":
+        status_color = "\033[33m"
+    else:
+        status_color = "\033[32m"
+
+    print(f"  {bold}{name}{reset}")
+    print(f"    Session (5h):  {progress_bar(data['session_utilization'])}")
+    print(f"    Resets: {dim}{format_reset(data['session_reset'])}{reset}")
+    print(f"    Weekly  (7d):  {progress_bar(data['weekly_utilization'])}")
+    print(f"    Resets: {dim}{format_reset(data['weekly_reset'], show_day=True)}{reset}")
+
+    overage = f"  |  Overage: {data['overage_status']}" if data["overage_status"] else ""
+    print(f"    Status: {status_color}{status}{reset}{overage}")
+    print()
+
+
+# ─── Token file ──────────────────────────────────────────────────────
+def load_tokens():
+    if not os.path.isfile(TOKEN_FILE):
+        print(f"토큰 파일이 없습니다: {TOKEN_FILE}")
+        print()
+        print("다음 형식으로 파일을 생성해주세요:")
+        print()
+        print("  <이름> <토큰>")
+        print()
+        print("예시:")
+        print("  user1 AAXXYYZZ9387")
+        print("  user2 BBZZABCD1234")
+        sys.exit(1)
+
+    names = []
+    tokens = []
+    with open(TOKEN_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                names.append(parts[0])
+                tokens.append(parts[1])
+
+    if not names:
+        print(f"토큰 파일에 항목이 없습니다: {TOKEN_FILE}")
+        sys.exit(1)
+
+    return names, tokens
+
+
+# ─── Account selection ───────────────────────────────────────────────
+def select_account(names):
+    selected = 0
+    count = len(names)
+
+    def draw_menu():
+        for i, name in enumerate(names):
+            if i == selected:
+                print(f"\r\033[1;32m> {name}\033[0m")
+            else:
+                print(f"\r  {name}")
+
+    def clear_menu():
+        for _ in range(count):
+            sys.stdout.write("\033[A\033[2K")
+        sys.stdout.flush()
+
+    def read_key():
+        ch = sys.stdin.read(1)
+        if ch == "\x1b":
+            rest = sys.stdin.read(2)
+            return ch + rest
+        return ch
+
+    print("계정을 선택하세요 (↑↓: 이동, Enter: 선택, q: 취소):")
+    print()
+    draw_menu()
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        while True:
+            key = read_key()
+            if key == "\x1b[A":  # 위
+                if selected > 0:
+                    selected -= 1
+            elif key == "\x1b[B":  # 아래
+                if selected < count - 1:
+                    selected += 1
+            elif key in ("\r", "\n"):  # Enter
+                break
+            elif key in ("q", "Q"):
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                print("\r\n취소되었습니다.")
+                sys.exit(0)
+            else:
+                continue
+            clear_menu()
+            draw_menu()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    return selected
+
+
+# ─── Main ────────────────────────────────────────────────────────────
+def main():
+    names, tokens = load_tokens()
+
+    # --usages: 모든 토큰의 usage 표시 후 종료
+    if "--usages" in sys.argv:
+        print("\n\033[1mClaude API Rate Limits\033[0m")
+        print("━" * 41)
+        print()
+        for name, token in zip(names, tokens):
+            data = fetch_usage(token)
+            display_usage(name, data)
+        return
+
+    # 일반 모드: 계정 선택
+    selected = select_account(names)
+
+    print()
+    print(f"선택: {names[selected]}")
+    print()
+
+    # 선택한 토큰의 usage 표시
+    print("\033[1mClaude API Rate Limits\033[0m")
+    print("━" * 41)
+    print()
+    data = fetch_usage(tokens[selected])
+    display_usage(names[selected], data)
+
+    # claude 실행
+    claude_args = [a for a in sys.argv[1:] if a != "--usages"]
+    os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = tokens[selected]
+    os.execvp("claude", ["claude"] + claude_args)
+
+
+if __name__ == "__main__":
+    main()
