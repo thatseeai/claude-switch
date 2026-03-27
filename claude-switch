@@ -368,6 +368,14 @@ def main():
         print()
         print(f"선택: {names[selected]}")
         print()
+
+        # 선택한 토큰의 usage 표시
+        print("\033[1mClaude API Rate Limits\033[0m")
+        print("━" * 41)
+        print()
+        data = fetch_usage(tokens[selected])
+        display_usage(names[selected], data)
+
         update_vscode_settings(tokens[selected])
         check_vscode_gitignore()
         return
