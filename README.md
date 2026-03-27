@@ -70,3 +70,29 @@ claude-switch --usages
 - Weekly (7d) — 7일 윈도우 사용률
 - 리셋 시각 및 남은 시간
 - 전체 상태 (normal / warning / rate_limited)
+
+### 등록된 계정 목록 확인
+
+```bash
+claude-switch --list
+```
+
+토큰 파일에 등록된 계정 이름을 한 줄씩 출력합니다.
+
+### 특정 계정의 토큰 조회
+
+```bash
+claude-switch --get-token NAME
+```
+
+해당 이름의 토큰을 stdout에 출력합니다. 셸 치환에 활용할 수 있습니다:
+
+```bash
+export CLAUDE_CODE_OAUTH_TOKEN=$(claude-switch --get-token personal)
+```
+
+### 도움말
+
+```bash
+claude-switch --help
+```
