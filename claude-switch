@@ -4,6 +4,7 @@ import sys
 import tty
 import termios
 import json
+import subprocess
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -216,6 +217,98 @@ def select_account(names):
     return selected
 
 
+# ─── VSCode settings ─────────────────────────────────────────────────
+def update_vscode_settings(token):
+    settings_path = os.path.join(os.getcwd(), ".vscode", "settings.json")
+
+    # 기존 settings.json 읽기 또는 새로 생성
+    if os.path.isfile(settings_path):
+        with open(settings_path) as f:
+            settings = json.load(f)
+    else:
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        settings = {}
+
+    env_vars = settings.get("claudeCode.environmentVariables", [])
+
+    # ANTHROPIC_API_KEY: 없으면 추가 (항상 value는 "")
+    has_api_key = any(e.get("name") == "ANTHROPIC_API_KEY" for e in env_vars)
+    if not has_api_key:
+        env_vars.append({"name": "ANTHROPIC_API_KEY", "value": ""})
+
+    # CLAUDE_CODE_OAUTH_TOKEN: 없으면 추가, 있으면 value 변경
+    found = False
+    for e in env_vars:
+        if e.get("name") == "CLAUDE_CODE_OAUTH_TOKEN":
+            e["value"] = token
+            found = True
+            break
+    if not found:
+        env_vars.append({"name": "CLAUDE_CODE_OAUTH_TOKEN", "value": token})
+
+    settings["claudeCode.environmentVariables"] = env_vars
+
+    with open(settings_path, "w") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    print(".vscode/settings.json 업데이트 완료")
+
+
+def clear_vscode_settings():
+    settings_path = os.path.join(os.getcwd(), ".vscode", "settings.json")
+
+    if not os.path.isfile(settings_path):
+        print(".vscode/settings.json 파일이 없습니다.")
+        return
+
+    with open(settings_path) as f:
+        settings = json.load(f)
+
+    env_vars = settings.get("claudeCode.environmentVariables", [])
+    if not env_vars:
+        print("claudeCode.environmentVariables 항목이 없습니다.")
+        return
+
+    remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"}
+    env_vars = [e for e in env_vars if e.get("name") not in remove_names]
+
+    if env_vars:
+        settings["claudeCode.environmentVariables"] = env_vars
+    else:
+        del settings["claudeCode.environmentVariables"]
+
+    with open(settings_path, "w") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    print(".vscode/settings.json에서 토큰 정보를 제거했습니다.")
+
+
+def check_vscode_gitignore():
+    # git 저장소인지 확인
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return
+    except FileNotFoundError:
+        return
+
+    # .vscode/settings.json이 gitignore로 무시되는지 확인
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", ".vscode/settings.json"],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        print()
+        print("\033[33m⚠ 경고: .vscode/settings.json이 .gitignore에 포함되어 있지 않습니다.\033[0m")
+        print("  토큰이 git에 커밋될 수 있습니다. .gitignore에 추가를 권장합니다:")
+        print("  echo '.vscode/settings.json' >> .gitignore")
+
+
 # ─── Main ────────────────────────────────────────────────────────────
 def print_help():
     print("사용법: claude-switch [옵션] [-- claude 인자...]")
@@ -225,6 +318,8 @@ def print_help():
     print("  --list              등록된 계정 이름을 나열합니다")
     print("  --get-token NAME    해당 계정의 토큰을 출력합니다")
     print("  --usages            모든 계정의 사용량을 표시합니다")
+    print("  --vscode            선택한 계정의 토큰을 .vscode/settings.json에 설정합니다")
+    print("  --vscode-clear      .vscode/settings.json에서 토큰 정보를 제거합니다")
     print()
     print(f"토큰 파일: {TOKEN_FILE}")
 
@@ -265,6 +360,21 @@ def main():
         for name, token in zip(names, tokens):
             data = fetch_usage(token)
             display_usage(name, data)
+        return
+
+    # --vscode: 계정 선택 후 .vscode/settings.json 업데이트
+    if "--vscode" in sys.argv:
+        selected = select_account(names)
+        print()
+        print(f"선택: {names[selected]}")
+        print()
+        update_vscode_settings(tokens[selected])
+        check_vscode_gitignore()
+        return
+
+    # --vscode-clear: .vscode/settings.json에서 토큰 제거
+    if "--vscode-clear" in sys.argv:
+        clear_vscode_settings()
         return
 
     # 일반 모드: 계정 선택
