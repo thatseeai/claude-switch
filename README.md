@@ -69,7 +69,8 @@ claude-switch --vscode
 {
   "claudeCode.environmentVariables": [
     { "name": "ANTHROPIC_API_KEY", "value": "" },
-    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "value": "sk-ant-oat01-XXX" }
+    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
+    { "name": "CLAUDE_CODE_OAUTH_NAME", "value": "personal" }
   ]
 }
 ```
@@ -77,13 +78,44 @@ claude-switch --vscode
 - 파일이 없으면 새로 생성하고, 기존 설정은 유지합니다.
 - git 저장소에서 `.vscode/settings.json`이 `.gitignore`에 포함되지 않으면 경고를 표시합니다.
 
+`--local-proxy PORT`와 함께 사용하면 `ANTHROPIC_BASE_URL`도 함께 설정합니다:
+
+```bash
+claude-switch --vscode --local-proxy 8080
+```
+
+```json
+{
+  "claudeCode.environmentVariables": [
+    { "name": "ANTHROPIC_API_KEY", "value": "" },
+    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
+    { "name": "CLAUDE_CODE_OAUTH_NAME", "value": "personal" },
+    { "name": "ANTHROPIC_BASE_URL", "value": "http://localhost:8080" }
+  ]
+}
+```
+
 ### VSCode 토큰 설정 제거
 
 ```bash
 claude-switch --vscode-clear
 ```
 
-`.vscode/settings.json`에서 `ANTHROPIC_API_KEY`와 `CLAUDE_CODE_OAUTH_TOKEN`을 제거합니다. 제거 후 환경변수가 남아있지 않으면 `claudeCode.environmentVariables` 항목도 함께 삭제합니다.
+`.vscode/settings.json`에서 `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`을 제거합니다. 제거 후 환경변수가 남아있지 않으면 `claudeCode.environmentVariables` 항목도 함께 삭제합니다.
+
+### 로컬 프록시 설정
+
+```bash
+claude-switch --local-proxy PORT
+```
+
+`ANTHROPIC_BASE_URL=http://localhost:PORT` 환경변수를 설정한 뒤 `claude`를 실행합니다. 포트는 필수 인자입니다.
+
+`--vscode` 옵션과 함께 사용할 수 있습니다:
+
+```bash
+claude-switch --vscode --local-proxy 8080
+```
 
 
 ### 모든 계정의 사용량 확인

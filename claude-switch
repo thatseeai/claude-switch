@@ -218,7 +218,16 @@ def select_account(names):
 
 
 # ─── VSCode settings ─────────────────────────────────────────────────
-def update_vscode_settings(token):
+def set_or_update_env_var(env_vars, name, value):
+    """env_vars 리스트에서 이름이 name인 항목을 찾아 value로 업데이트하거나, 없으면 추가."""
+    for e in env_vars:
+        if e.get("name") == name:
+            e["value"] = value
+            return
+    env_vars.append({"name": name, "value": value})
+
+
+def update_vscode_settings(token, token_name, local_proxy_port=None):
     settings_path = os.path.join(os.getcwd(), ".vscode", "settings.json")
 
     # 기존 settings.json 읽기 또는 새로 생성
@@ -232,19 +241,18 @@ def update_vscode_settings(token):
     env_vars = settings.get("claudeCode.environmentVariables", [])
 
     # ANTHROPIC_API_KEY: 없으면 추가 (항상 value는 "")
-    has_api_key = any(e.get("name") == "ANTHROPIC_API_KEY" for e in env_vars)
-    if not has_api_key:
+    if not any(e.get("name") == "ANTHROPIC_API_KEY" for e in env_vars):
         env_vars.append({"name": "ANTHROPIC_API_KEY", "value": ""})
 
+    # CLAUDE_CODE_OAUTH_NAME: 없으면 추가, 있으면 value 변경
+    set_or_update_env_var(env_vars, "CLAUDE_CODE_OAUTH_NAME", token_name)
+
     # CLAUDE_CODE_OAUTH_TOKEN: 없으면 추가, 있으면 value 변경
-    found = False
-    for e in env_vars:
-        if e.get("name") == "CLAUDE_CODE_OAUTH_TOKEN":
-            e["value"] = token
-            found = True
-            break
-    if not found:
-        env_vars.append({"name": "CLAUDE_CODE_OAUTH_TOKEN", "value": token})
+    set_or_update_env_var(env_vars, "CLAUDE_CODE_OAUTH_TOKEN", token)
+
+    # ANTHROPIC_BASE_URL: local_proxy_port가 지정된 경우에만 설정
+    if local_proxy_port is not None:
+        set_or_update_env_var(env_vars, "ANTHROPIC_BASE_URL", f"http://localhost:{local_proxy_port}")
 
     settings["claudeCode.environmentVariables"] = env_vars
 
@@ -270,7 +278,7 @@ def clear_vscode_settings():
         print("claudeCode.environmentVariables 항목이 없습니다.")
         return
 
-    remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"}
+    remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_NAME", "ANTHROPIC_BASE_URL"}
     env_vars = [e for e in env_vars if e.get("name") not in remove_names]
 
     if env_vars:
@@ -320,6 +328,7 @@ def print_help():
     print("  --usages            모든 계정의 사용량을 표시합니다")
     print("  --vscode            선택한 계정의 토큰을 .vscode/settings.json에 설정합니다")
     print("  --vscode-clear      .vscode/settings.json에서 토큰 정보를 제거합니다")
+    print("  --local-proxy PORT  ANTHROPIC_BASE_URL=http://localhost:PORT 를 설정합니다")
     print()
     print(f"토큰 파일: {TOKEN_FILE}")
 
@@ -329,6 +338,20 @@ def main():
     if "--help" in sys.argv or "-h" in sys.argv:
         print_help()
         return
+
+    # --local-proxy PORT: ANTHROPIC_BASE_URL 설정용 포트 파싱
+    local_proxy_port = None
+    if "--local-proxy" in sys.argv:
+        idx = sys.argv.index("--local-proxy")
+        if idx + 1 >= len(sys.argv) or sys.argv[idx + 1].startswith("-"):
+            print("오류: --local-proxy 옵션에 PORT를 지정해야 합니다.", file=sys.stderr)
+            print("사용법: claude-switch --local-proxy <PORT>", file=sys.stderr)
+            sys.exit(1)
+        port_str = sys.argv[idx + 1]
+        if not port_str.isdigit():
+            print(f"오류: 포트 번호가 올바르지 않습니다: {port_str}", file=sys.stderr)
+            sys.exit(1)
+        local_proxy_port = int(port_str)
 
     names, tokens = load_tokens()
 
@@ -376,7 +399,7 @@ def main():
         data = fetch_usage(tokens[selected])
         display_usage(names[selected], data)
 
-        update_vscode_settings(tokens[selected])
+        update_vscode_settings(tokens[selected], names[selected], local_proxy_port)
         check_vscode_gitignore()
         return
 
@@ -402,9 +425,14 @@ def main():
     display_usage(names[selected], data)
 
     # claude 실행
-    skip_args = {"--usages"}
-    claude_args = [a for a in sys.argv[1:] if a not in skip_args]
+    skip_args = {"--usages", "--local-proxy"}
+    proxy_idx = sys.argv.index("--local-proxy") if "--local-proxy" in sys.argv else -1
+    skip_idx = {proxy_idx + 1} if proxy_idx >= 0 else set()
+    claude_args = [a for i, a in enumerate(sys.argv[1:], 1) if a not in skip_args and i not in skip_idx]
+    if local_proxy_port is not None:
+        os.environ["ANTHROPIC_BASE_URL"] = f"http://localhost:{local_proxy_port}"
     os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = tokens[selected]
+    os.environ["CLAUDE_CODE_OAUTH_NAME"] = names[selected]
     os.execvp("claude", ["claude"] + claude_args)
 
 
