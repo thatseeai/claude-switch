@@ -311,10 +311,11 @@ def check_vscode_gitignore():
         capture_output=True,
     )
     if result.returncode != 0:
-        print()
-        print("\033[33m⚠ 경고: .vscode/settings.json이 .gitignore에 포함되어 있지 않습니다.\033[0m")
-        print("  토큰이 git에 커밋될 수 있습니다. .gitignore에 추가를 권장합니다:")
-        print("  echo '.vscode/settings.json' >> .gitignore")
+        gitignore_path = ".gitignore"
+        entry = ".vscode/settings.json"
+        with open(gitignore_path, "a") as f:
+            f.write(f"\n{entry}\n")
+        print(f"\033[32m✓ {entry}을 .gitignore에 추가했습니다.\033[0m")
 
 
 # ─── Main ────────────────────────────────────────────────────────────
