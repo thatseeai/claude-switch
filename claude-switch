@@ -250,9 +250,11 @@ def update_vscode_settings(token, token_name, local_proxy_port=None):
     # CLAUDE_CODE_OAUTH_TOKEN: 없으면 추가, 있으면 value 변경
     set_or_update_env_var(env_vars, "CLAUDE_CODE_OAUTH_TOKEN", token)
 
-    # ANTHROPIC_BASE_URL: local_proxy_port가 지정된 경우에만 설정
+    # ANTHROPIC_BASE_URL: local_proxy_port가 지정된 경우에만 설정, 없으면 제거
     if local_proxy_port is not None:
         set_or_update_env_var(env_vars, "ANTHROPIC_BASE_URL", f"http://localhost:{local_proxy_port}")
+    else:
+        env_vars[:] = [e for e in env_vars if e.get("name") != "ANTHROPIC_BASE_URL"]
 
     settings["claudeCode.environmentVariables"] = env_vars
 
