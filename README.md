@@ -95,6 +95,21 @@ claude-switch --vscode --local-proxy 8080
 }
 ```
 
+### SessionStart 알림 hook
+
+`claude-switch` 또는 `claude-switch --vscode`로 계정을 선택하면, 현재 디렉토리의 `.claude/settings.local.json`에 SessionStart hook을 자동으로 추가합니다. Claude Code 세션이 시작될 때 OS 알림으로 어떤 계정 토큰을 사용 중인지 표시합니다.
+
+- macOS: `osascript`를 통한 네이티브 알림
+- Linux: `notify-send`를 통한 알림
+
+기존 설정과 다른 SessionStart hook은 유지되며, 동일한 알림 hook이 이미 있으면 중복 추가하지 않습니다.
+
+`claude-switch --vscode-clear` 실행 시 이 hook도 함께 제거됩니다.
+
+> **참고: 중복 판단 방식**
+>
+> hook의 중복 여부는 command 문자열에 `CLAUDE_CODE_OAUTH_NAME`, `osascript`, `notify-send` 세 키워드가 모두 포함되어 있는지로 판단합니다(heuristic). 사용자가 직접 작성한 hook에 이 세 키워드가 모두 포함된 경우 알림 hook으로 오인되어 추가되지 않거나 `--vscode-clear` 시 의도치 않게 삭제될 수 있습니다.
+
 ### VSCode 토큰 설정 제거
 
 ```bash
@@ -102,6 +117,8 @@ claude-switch --vscode-clear
 ```
 
 `.vscode/settings.json`에서 `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`을 제거합니다. 제거 후 환경변수가 남아있지 않으면 `claudeCode.environmentVariables` 항목도 함께 삭제합니다.
+
+또한 `.claude/settings.local.json`에서 SessionStart 알림 hook도 함께 제거합니다.
 
 ### 로컬 프록시 설정
 
