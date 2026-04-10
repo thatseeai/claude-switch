@@ -1,6 +1,13 @@
-# SessionStart hook에 Local Notiification 추가하기
+# SessionStart hook에 Local Notification 추가하기
 
-코딩 에이전트에게 구현을 지시할 내용이다.
+코딩 에이전트 구현 지시문이다.
+
+## 문서 연혁
+
+2026-04-10
+- 최초 작성
+
+## 목적
 
 Claude Code CLI 및 VScode Claude Code extension에 다음 hook을 추가한다.
 
@@ -22,7 +29,9 @@ Claude Code CLI 및 VScode Claude Code extension에 다음 hook을 추가한다.
 }
 ```
 
-참고 자료: https://code.claude.com/docs/en/hooks
+## 참고 자료
+
+- [Claude Code Docs / Hooks reference](https://code.claude.com/docs/en/hooks)
 
 ## 추가 위치
 
