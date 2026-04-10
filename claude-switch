@@ -13,6 +13,13 @@ from datetime import datetime
 TOKEN_FILE = os.path.expanduser("~/.claude/long-lived-auth-tokens.txt")
 API_URL = "https://api.anthropic.com/v1/messages"
 
+DEBUG = False
+
+
+def debug(msg):
+    if DEBUG:
+        print(f"\033[36m[DEBUG] {msg}\033[0m", file=sys.stderr)
+
 
 # ─── Usage ───────────────────────────────────────────────────────────
 def fetch_usage(token):
@@ -298,24 +305,31 @@ def clear_vscode_settings():
 def update_session_start_hook():
     """현재 작업 디렉토리의 .claude/settings.local.json에 SessionStart 알림 hook을 추가한다."""
     settings_path = os.path.join(os.getcwd(), ".claude", "settings.local.json")
+    debug(f"update_session_start_hook: settings_path={settings_path}")
 
     if os.path.isfile(settings_path):
         with open(settings_path) as f:
             settings = json.load(f)
+        debug(f"update_session_start_hook: 기존 파일 로드, keys={list(settings.keys())}")
     else:
         os.makedirs(os.path.dirname(settings_path), exist_ok=True)
         settings = {}
+        debug("update_session_start_hook: 파일 없음, 새로 생성")
 
     hooks = settings.get("hooks", {})
     session_start = hooks.get("SessionStart", [])
+    debug(f"update_session_start_hook: 기존 SessionStart 항목 수={len(session_start)}")
 
     # 중복 체크: command에 CLAUDE_CODE_OAUTH_NAME, osascript, notify-send 포함 여부
     duplicate_keywords = ("CLAUDE_CODE_OAUTH_NAME", "osascript", "notify-send")
-    for matcher_group in session_start:
+    for i, matcher_group in enumerate(session_start):
         for hook in matcher_group.get("hooks", []):
             cmd = hook.get("command", "")
-            if all(kw in cmd for kw in duplicate_keywords):
-                return  # 이미 존재
+            match = all(kw in cmd for kw in duplicate_keywords)
+            debug(f"update_session_start_hook: matcher_group[{i}] 중복체크={match}, command={cmd[:80]}...")
+            if match:
+                debug(f"update_session_start_hook: 중복 발견(matcher_group[{i}]), 스킵")
+                return
 
     noti_hook = {
         "matcher": "startup",
@@ -331,6 +345,7 @@ def update_session_start_hook():
     hooks["SessionStart"] = session_start
     settings["hooks"] = hooks
 
+    debug(f"update_session_start_hook: hook 추가 완료, 저장 중")
     with open(settings_path, "w") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
         f.write("\n")
@@ -339,40 +354,54 @@ def update_session_start_hook():
 def remove_session_start_hook():
     """현재 작업 디렉토리의 .claude/settings.local.json에서 SessionStart 알림 hook을 제거한다."""
     settings_path = os.path.join(os.getcwd(), ".claude", "settings.local.json")
+    debug(f"remove_session_start_hook: settings_path={settings_path}")
 
     if not os.path.isfile(settings_path):
+        debug("remove_session_start_hook: 파일 없음, 스킵")
         return
 
     with open(settings_path) as f:
         settings = json.load(f)
+    debug(f"remove_session_start_hook: 기존 파일 로드, keys={list(settings.keys())}")
 
     hooks = settings.get("hooks", {})
     session_start = hooks.get("SessionStart", [])
+    debug(f"remove_session_start_hook: SessionStart 항목 수={len(session_start)}")
     if not session_start:
+        debug("remove_session_start_hook: SessionStart 비어있음, 스킵")
         return
 
     duplicate_keywords = ("CLAUDE_CODE_OAUTH_NAME", "osascript", "notify-send")
+    changed = False
     filtered = []
-    for matcher_group in session_start:
+    for i, matcher_group in enumerate(session_start):
         inner_hooks = matcher_group.get("hooks", [])
         remaining = [h for h in inner_hooks if not all(kw in h.get("command", "") for kw in duplicate_keywords)]
+        debug(f"remove_session_start_hook: matcher_group[{i}] inner={len(inner_hooks)} remaining={len(remaining)}")
+        if len(remaining) < len(inner_hooks):
+            changed = True
         if remaining:
             matcher_group["hooks"] = remaining
             filtered.append(matcher_group)
 
-    if len(filtered) == len(session_start):
-        return  # 변경 없음
+    debug(f"remove_session_start_hook: changed={changed} filtered={len(filtered)} original={len(session_start)}")
+    if not changed:
+        debug("remove_session_start_hook: 변경 없음, 스킵")
+        return
 
     if filtered:
         hooks["SessionStart"] = filtered
     else:
         del hooks["SessionStart"]
+        debug("remove_session_start_hook: SessionStart 키 삭제")
 
     if hooks:
         settings["hooks"] = hooks
     else:
         del settings["hooks"]
+        debug("remove_session_start_hook: hooks 키 삭제")
 
+    debug("remove_session_start_hook: 저장 중")
     with open(settings_path, "w") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
         f.write("\n")
@@ -415,11 +444,19 @@ def print_help():
     print("  --vscode            선택한 계정의 토큰을 .vscode/settings.json에 설정합니다")
     print("  --vscode-clear      .vscode/settings.json에서 토큰 정보를 제거합니다")
     print("  --local-proxy PORT  ANTHROPIC_BASE_URL=http://localhost:PORT 를 설정합니다")
+    print("  --debug             디버그 메시지를 출력합니다")
     print()
     print(f"토큰 파일: {TOKEN_FILE}")
 
 
 def main():
+    global DEBUG
+    if "--debug" in sys.argv:
+        DEBUG = True
+        sys.argv.remove("--debug")
+    debug(f"main: argv={sys.argv}")
+    debug(f"main: cwd={os.getcwd()}")
+
     # --help, -h: 도움말 출력 후 종료
     if "--help" in sys.argv or "-h" in sys.argv:
         print_help()
@@ -473,6 +510,7 @@ def main():
 
     # --vscode: 계정 선택 후 .vscode/settings.json 업데이트
     if "--vscode" in sys.argv:
+        debug("main: --vscode 모드")
         selected = select_account(names)
         print()
         print(f"선택: {names[selected]}")
@@ -486,17 +524,21 @@ def main():
         display_usage(names[selected], data)
 
         update_vscode_settings(tokens[selected], names[selected], local_proxy_port)
+        debug("main: update_session_start_hook 호출")
         update_session_start_hook()
         check_vscode_gitignore()
         return
 
     # --vscode-clear: .vscode/settings.json에서 토큰 제거
     if "--vscode-clear" in sys.argv:
+        debug("main: --vscode-clear 모드")
         clear_vscode_settings()
+        debug("main: remove_session_start_hook 호출")
         remove_session_start_hook()
         return
 
     # 일반 모드: 계정 선택
+    debug("main: 일반 모드")
     sys.stdout.write("\033c")
     sys.stdout.flush()
     selected = select_account(names)
@@ -513,6 +555,7 @@ def main():
     display_usage(names[selected], data)
 
     # SessionStart hook 추가
+    debug("main: update_session_start_hook 호출")
     update_session_start_hook()
 
     # claude 실행
