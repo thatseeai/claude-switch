@@ -457,20 +457,30 @@ def main():
     debug(f"main: argv={sys.argv}")
     debug(f"main: cwd={os.getcwd()}")
 
+    # `--` 구분자 기준으로 claude-switch 옵션과 claude 전달 인자를 분리
+    if "--" in sys.argv:
+        sep_idx = sys.argv.index("--")
+        own_argv = sys.argv[:sep_idx]
+        passthrough_argv = sys.argv[sep_idx + 1:]
+    else:
+        own_argv = sys.argv[:]
+        passthrough_argv = []
+    debug(f"main: own_argv={own_argv} passthrough_argv={passthrough_argv}")
+
     # --help, -h: 도움말 출력 후 종료
-    if "--help" in sys.argv or "-h" in sys.argv:
+    if "--help" in own_argv or "-h" in own_argv:
         print_help()
         return
 
     # --local-proxy PORT: ANTHROPIC_BASE_URL 설정용 포트 파싱
     local_proxy_port = None
-    if "--local-proxy" in sys.argv:
-        idx = sys.argv.index("--local-proxy")
-        if idx + 1 >= len(sys.argv) or sys.argv[idx + 1].startswith("-"):
+    if "--local-proxy" in own_argv:
+        idx = own_argv.index("--local-proxy")
+        if idx + 1 >= len(own_argv) or own_argv[idx + 1].startswith("-"):
             print("오류: --local-proxy 옵션에 PORT를 지정해야 합니다.", file=sys.stderr)
             print("사용법: claude-switch --local-proxy <PORT>", file=sys.stderr)
             sys.exit(1)
-        port_str = sys.argv[idx + 1]
+        port_str = own_argv[idx + 1]
         if not port_str.isdigit():
             print(f"오류: 포트 번호가 올바르지 않습니다: {port_str}", file=sys.stderr)
             sys.exit(1)
@@ -479,18 +489,18 @@ def main():
     names, tokens = load_tokens()
 
     # --list: 계정 이름 목록 출력 후 종료
-    if "--list" in sys.argv:
+    if "--list" in own_argv:
         for name in names:
             print(name)
         return
 
     # --get-token NAME: 해당 이름의 토큰 출력 후 종료
-    if "--get-token" in sys.argv:
-        idx = sys.argv.index("--get-token")
-        if idx + 1 >= len(sys.argv):
+    if "--get-token" in own_argv:
+        idx = own_argv.index("--get-token")
+        if idx + 1 >= len(own_argv):
             print("사용법: claude-switch --get-token <이름>", file=sys.stderr)
             sys.exit(1)
-        target = sys.argv[idx + 1]
+        target = own_argv[idx + 1]
         if target not in names:
             print(f"'{target}' 계정을 찾을 수 없습니다.", file=sys.stderr)
             print(f"사용 가능한 계정: {', '.join(names)}", file=sys.stderr)
@@ -499,7 +509,7 @@ def main():
         return
 
     # --usages: 모든 토큰의 usage 표시 후 종료
-    if "--usages" in sys.argv:
+    if "--usages" in own_argv:
         print("\n\033[1mClaude API Rate Limits\033[0m")
         print("━" * 41)
         print()
@@ -509,7 +519,7 @@ def main():
         return
 
     # --vscode: 계정 선택 후 .vscode/settings.json 업데이트
-    if "--vscode" in sys.argv:
+    if "--vscode" in own_argv:
         debug("main: --vscode 모드")
         selected = select_account(names)
         print()
@@ -530,7 +540,7 @@ def main():
         return
 
     # --vscode-clear: .vscode/settings.json에서 토큰 제거
-    if "--vscode-clear" in sys.argv:
+    if "--vscode-clear" in own_argv:
         debug("main: --vscode-clear 모드")
         clear_vscode_settings()
         debug("main: remove_session_start_hook 호출")
@@ -559,10 +569,13 @@ def main():
     update_session_start_hook()
 
     # claude 실행
+    # own_argv에서 claude-switch 전용 옵션을 제거하고, 나머지와 passthrough_argv를 합침
     skip_args = {"--usages", "--local-proxy"}
-    proxy_idx = sys.argv.index("--local-proxy") if "--local-proxy" in sys.argv else -1
+    proxy_idx = own_argv.index("--local-proxy") if "--local-proxy" in own_argv else -1
     skip_idx = {proxy_idx + 1} if proxy_idx >= 0 else set()
-    claude_args = [a for i, a in enumerate(sys.argv[1:], 1) if a not in skip_args and i not in skip_idx]
+    own_claude_args = [a for i, a in enumerate(own_argv[1:], 1) if a not in skip_args and i not in skip_idx]
+    claude_args = own_claude_args + passthrough_argv
+    debug(f"main: claude_args={claude_args}")
     if local_proxy_port is not None:
         os.environ["ANTHROPIC_BASE_URL"] = f"http://localhost:{local_proxy_port}"
     os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = tokens[selected]
