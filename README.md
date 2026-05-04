@@ -78,10 +78,10 @@ claude-switch --vscode
 - 파일이 없으면 새로 생성하고, 기존 설정은 유지합니다.
 - git 저장소에서 `.vscode/settings.json`이 `.gitignore`에 포함되지 않으면 경고를 표시합니다.
 
-`--local-proxy PORT`와 함께 사용하면 `ANTHROPIC_BASE_URL`도 함께 설정합니다:
+`--proxy [HOST:]PORT`와 함께 사용하면 `ANTHROPIC_BASE_URL`도 함께 설정합니다:
 
 ```bash
-claude-switch --vscode --local-proxy 8080
+claude-switch --vscode --proxy 8080
 ```
 
 ```json
@@ -120,18 +120,23 @@ claude-switch --vscode-clear
 
 또한 `.claude/settings.local.json`에서 SessionStart 알림 hook도 함께 제거합니다.
 
-### 로컬 프록시 설정
+### 프록시 설정
 
 ```bash
-claude-switch --local-proxy PORT
+claude-switch --proxy [HOST:]PORT
 ```
 
-`ANTHROPIC_BASE_URL=http://localhost:PORT` 환경변수를 설정한 뒤 `claude`를 실행합니다. 포트는 필수 인자입니다.
+`ANTHROPIC_BASE_URL=http://[HOST:]PORT` 환경변수를 설정한 뒤 `claude`를 실행합니다. `HOST`를 생략하면 `localhost`를 사용합니다.
+
+```bash
+claude-switch --proxy 3001              # http://localhost:3001
+claude-switch --proxy 192.168.2.12:3000 # http://192.168.2.12:3000
+```
 
 `--vscode` 옵션과 함께 사용할 수 있습니다:
 
 ```bash
-claude-switch --vscode --local-proxy 8080
+claude-switch --vscode --proxy 8080
 ```
 
 
