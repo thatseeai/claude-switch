@@ -407,6 +407,35 @@ def remove_session_start_hook():
         f.write("\n")
 
 
+def ensure_git_root_cwd():
+    """현재 디렉토리가 git 저장소이면 최상위 디렉토리로 이동한다.
+    git 관리되지 않는 경우 경고 후 사용자 확인을 받는다."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        print("\033[33m경고: git 명령을 찾을 수 없습니다. 현재 디렉토리에서 진행합니다.\033[0m")
+        result = None
+
+    if result is not None and result.returncode == 0:
+        toplevel = result.stdout.strip()
+        if toplevel and toplevel != os.getcwd():
+            debug(f"ensure_git_root_cwd: chdir {os.getcwd()} -> {toplevel}")
+            os.chdir(toplevel)
+        return
+
+    print(f"\033[33m경고: 현재 디렉토리는 git으로 관리되지 않습니다: {os.getcwd()}\033[0m")
+    try:
+        answer = input("계속 진행하시겠습니까? (y/N): ").strip().lower()
+    except EOFError:
+        answer = ""
+    if answer not in ("y", "yes"):
+        print("중단되었습니다.")
+        sys.exit(1)
+
+
 def check_vscode_gitignore():
     # git 저장소인지 확인
     try:
@@ -529,6 +558,7 @@ def main():
     # --vscode: 계정 선택 후 .vscode/settings.json 업데이트
     if "--vscode" in own_argv:
         debug("main: --vscode 모드")
+        ensure_git_root_cwd()
         selected = select_account(names)
         print()
         print(f"선택: {names[selected]}")
@@ -550,6 +580,7 @@ def main():
     # --vscode-clear: .vscode/settings.json에서 토큰 제거
     if "--vscode-clear" in own_argv:
         debug("main: --vscode-clear 모드")
+        ensure_git_root_cwd()
         clear_vscode_settings()
         debug("main: remove_session_start_hook 호출")
         remove_session_start_hook()
@@ -557,6 +588,7 @@ def main():
 
     # 일반 모드: 계정 선택
     debug("main: 일반 모드")
+    ensure_git_root_cwd()
     sys.stdout.write("\033c")
     sys.stdout.flush()
     selected = select_account(names)
