@@ -57,6 +57,13 @@ claude-switch [ARGS]
 
 ↑↓ 키로 계정을 선택하면 해당 계정의 API 사용량을 표시한 뒤 `claude [ARGS]`를 실행합니다.
 
+### 작업 디렉토리 처리
+
+`.vscode/settings.json` 또는 `.claude/settings.local.json`을 생성/수정하는 모든 동작(`claude-switch`, `--vscode`, `--vscode-clear`)은 실행 전 현재 디렉토리가 git 저장소인지 확인합니다.
+
+- git 저장소이면 최상위 디렉토리로 자동 이동한 뒤 작업을 수행합니다.
+- git으로 관리되지 않는 디렉토리이면 경고를 표시하고 계속 진행할지 `(y/N)` 확인을 받습니다. 엔터(기본 N)나 `n` 입력 시 중단됩니다.
+
 ### VSCode에 토큰 설정
 
 ```bash
