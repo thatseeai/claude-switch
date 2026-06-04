@@ -21,6 +21,19 @@ def debug(msg):
         print(f"\033[36m[DEBUG] {msg}\033[0m", file=sys.stderr)
 
 
+def load_json_file(path):
+    """기존 JSON 파일을 읽어 파싱한다. 형식이 올바르지 않으면 명확한 에러 메시지를 출력하고 종료한다."""
+    with open(path) as f:
+        content = f.read()
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        print(f"오류: {path} 파일의 JSON 형식이 올바르지 않습니다.", file=sys.stderr)
+        print(f"  {e.lineno}번째 줄 {e.colno}번째 칸: {e.msg}", file=sys.stderr)
+        print("  파일을 수정한 뒤 다시 시도하세요.", file=sys.stderr)
+        sys.exit(1)
+
+
 # ─── Usage ───────────────────────────────────────────────────────────
 def fetch_usage(token):
     body = json.dumps({
@@ -239,8 +252,7 @@ def update_vscode_settings(token, token_name, proxy_url=None):
 
     # 기존 settings.json 읽기 또는 새로 생성
     if os.path.isfile(settings_path):
-        with open(settings_path) as f:
-            settings = json.load(f)
+        settings = load_json_file(settings_path)
     else:
         os.makedirs(os.path.dirname(settings_path), exist_ok=True)
         settings = {}
@@ -279,8 +291,7 @@ def clear_vscode_settings():
         print(".vscode/settings.json 파일이 없습니다.")
         return
 
-    with open(settings_path) as f:
-        settings = json.load(f)
+    settings = load_json_file(settings_path)
 
     env_vars = settings.get("claudeCode.environmentVariables", [])
     if not env_vars:
@@ -308,8 +319,7 @@ def update_session_start_hook():
     debug(f"update_session_start_hook: settings_path={settings_path}")
 
     if os.path.isfile(settings_path):
-        with open(settings_path) as f:
-            settings = json.load(f)
+        settings = load_json_file(settings_path)
         debug(f"update_session_start_hook: 기존 파일 로드, keys={list(settings.keys())}")
     else:
         os.makedirs(os.path.dirname(settings_path), exist_ok=True)
@@ -360,8 +370,7 @@ def remove_session_start_hook():
         debug("remove_session_start_hook: 파일 없음, 스킵")
         return
 
-    with open(settings_path) as f:
-        settings = json.load(f)
+    settings = load_json_file(settings_path)
     debug(f"remove_session_start_hook: 기존 파일 로드, keys={list(settings.keys())}")
 
     hooks = settings.get("hooks", {})
