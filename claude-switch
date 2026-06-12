@@ -247,7 +247,7 @@ def set_or_update_env_var(env_vars, name, value):
     env_vars.append({"name": name, "value": value})
 
 
-def update_vscode_settings(token, token_name, proxy_url=None):
+def update_vscode_settings(token, token_name, proxy_url=None, use_old=False):
     settings_path = os.path.join(os.getcwd(), ".vscode", "settings.json")
 
     # 기존 settings.json 읽기 또는 새로 생성
@@ -266,8 +266,12 @@ def update_vscode_settings(token, token_name, proxy_url=None):
     # CLAUDE_CODE_OAUTH_NAME: 없으면 추가, 있으면 value 변경
     set_or_update_env_var(env_vars, "CLAUDE_CODE_OAUTH_NAME", token_name)
 
-    # CLAUDE_CODE_OAUTH_TOKEN: 없으면 추가, 있으면 value 변경
-    set_or_update_env_var(env_vars, "CLAUDE_CODE_OAUTH_TOKEN", token)
+    # 토큰 변수: --old면 CLAUDE_CODE_OAUTH_TOKEN, 아니면 ANTHROPIC_AUTH_TOKEN
+    token_var = "CLAUDE_CODE_OAUTH_TOKEN" if use_old else "ANTHROPIC_AUTH_TOKEN"
+    other_var = "ANTHROPIC_AUTH_TOKEN" if use_old else "CLAUDE_CODE_OAUTH_TOKEN"
+    set_or_update_env_var(env_vars, token_var, token)
+    # 반대편 토큰 변수가 남아있으면 제거 (모드 전환 시 잔여 항목 정리)
+    env_vars[:] = [e for e in env_vars if e.get("name") != other_var]
 
     # ANTHROPIC_BASE_URL: proxy_url가 지정된 경우에만 설정, 없으면 제거
     if proxy_url is not None:
@@ -298,7 +302,7 @@ def clear_vscode_settings():
         print("claudeCode.environmentVariables 항목이 없습니다.")
         return
 
-    remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_NAME", "ANTHROPIC_BASE_URL"}
+    remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_NAME", "ANTHROPIC_BASE_URL"}
     env_vars = [e for e in env_vars if e.get("name") not in remove_names]
 
     if env_vars:
@@ -482,6 +486,7 @@ def print_help():
     print("  --vscode            선택한 계정의 토큰을 .vscode/settings.json에 설정합니다")
     print("  --vscode-clear      .vscode/settings.json에서 토큰 정보를 제거합니다")
     print("  --proxy [HOST:]PORT ANTHROPIC_BASE_URL=http://[HOST:]PORT 를 설정합니다 (HOST 생략 시 localhost)")
+    print("  --old               토큰을 ANTHROPIC_AUTH_TOKEN 대신 CLAUDE_CODE_OAUTH_TOKEN 에 설정합니다")
     print("  --debug             디버그 메시지를 출력합니다")
     print()
     print(f"토큰 파일: {TOKEN_FILE}")
@@ -492,7 +497,13 @@ def main():
     if "--debug" in sys.argv:
         DEBUG = True
         sys.argv.remove("--debug")
-    debug(f"main: argv={sys.argv}")
+
+    # --old: 기존 동작(CLAUDE_CODE_OAUTH_TOKEN 사용). 없으면 ANTHROPIC_AUTH_TOKEN 사용.
+    use_old = "--old" in sys.argv
+    if use_old:
+        sys.argv.remove("--old")
+
+    debug(f"main: argv={sys.argv} use_old={use_old}")
     debug(f"main: cwd={os.getcwd()}")
 
     # `--` 구분자 기준으로 claude-switch 옵션과 claude 전달 인자를 분리
@@ -580,7 +591,7 @@ def main():
         data = fetch_usage(tokens[selected])
         display_usage(names[selected], data)
 
-        update_vscode_settings(tokens[selected], names[selected], proxy_url)
+        update_vscode_settings(tokens[selected], names[selected], proxy_url, use_old)
         debug("main: update_session_start_hook 호출")
         update_session_start_hook()
         check_vscode_gitignore()
@@ -627,7 +638,10 @@ def main():
     debug(f"main: claude_args={claude_args}")
     if proxy_url is not None:
         os.environ["ANTHROPIC_BASE_URL"] = proxy_url
-    os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = tokens[selected]
+    if use_old:
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = tokens[selected]
+    else:
+        os.environ["ANTHROPIC_AUTH_TOKEN"] = tokens[selected]
     os.environ["CLAUDE_CODE_OAUTH_NAME"] = names[selected]
     os.execvp("claude", ["claude"] + claude_args)
 
