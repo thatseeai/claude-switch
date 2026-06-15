@@ -57,7 +57,7 @@ claude-switch [ARGS]
 
 ↑↓ 키로 계정을 선택하면 해당 계정의 API 사용량을 표시한 뒤 `claude [ARGS]`를 실행합니다.
 
-기본적으로 토큰은 `ANTHROPIC_AUTH_TOKEN` 환경변수에 설정됩니다. `--old` 옵션을 주면 기존 동작대로 `CLAUDE_CODE_OAUTH_TOKEN`에 설정합니다(값은 동일).
+기본적으로 토큰은 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수에 설정됩니다. `--aat` 옵션을 주면 `ANTHROPIC_AUTH_TOKEN`에 설정합니다(값은 동일).
 
 ### 작업 디렉토리 처리
 
@@ -72,13 +72,13 @@ claude-switch [ARGS]
 claude-switch --vscode
 ```
 
-계정을 선택하면 현재 디렉토리의 `.vscode/settings.json`에 토큰을 설정합니다. 기본적으로 토큰은 `ANTHROPIC_AUTH_TOKEN`에 설정되며, `--old` 옵션을 주면 `CLAUDE_CODE_OAUTH_TOKEN`에 설정합니다.
+계정을 선택하면 현재 디렉토리의 `.vscode/settings.json`에 토큰을 설정합니다. 기본적으로 토큰은 `CLAUDE_CODE_OAUTH_TOKEN`에 설정되며, `--aat` 옵션을 주면 `ANTHROPIC_AUTH_TOKEN`에 설정합니다.
 
 ```json
 {
   "claudeCode.environmentVariables": [
     { "name": "ANTHROPIC_API_KEY", "value": "" },
-    { "name": "ANTHROPIC_AUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
+    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
     { "name": "CLAUDE_CODE_OAUTH_NAME", "value": "personal" }
   ]
 }
@@ -97,7 +97,7 @@ claude-switch --vscode --proxy 8080
 {
   "claudeCode.environmentVariables": [
     { "name": "ANTHROPIC_API_KEY", "value": "" },
-    { "name": "ANTHROPIC_AUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
+    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
     { "name": "CLAUDE_CODE_OAUTH_NAME", "value": "personal" },
     { "name": "ANTHROPIC_BASE_URL", "value": "http://localhost:8080" }
   ]
@@ -183,15 +183,15 @@ claude-switch --get-token NAME
 export CLAUDE_CODE_OAUTH_TOKEN=$(claude-switch --get-token personal)
 ```
 
-### 토큰 환경변수 선택 (`--old`)
+### 토큰 환경변수 선택 (`--aat`)
 
-기본적으로 선택한 토큰은 `ANTHROPIC_AUTH_TOKEN` 환경변수에 설정됩니다.
+기본적으로 선택한 토큰은 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수에 설정됩니다.
 
 ```bash
-claude-switch --old
+claude-switch --aat
 ```
 
-`--old` 옵션을 주면 기존 동작대로 토큰을 `CLAUDE_CODE_OAUTH_TOKEN`에 설정합니다. 설정되는 값은 동일하며, 나머지 동작에는 차이가 없습니다. `--vscode`와 함께 사용하면 `.vscode/settings.json`의 토큰 변수에도 동일하게 적용됩니다.
+`--aat` 옵션을 주면 토큰을 `ANTHROPIC_AUTH_TOKEN`에 설정합니다. 설정되는 값은 동일하며, 나머지 동작에는 차이가 없습니다. `--vscode`와 함께 사용하면 `.vscode/settings.json`의 토큰 변수에도 동일하게 적용됩니다.
 
 ### 도움말
 
