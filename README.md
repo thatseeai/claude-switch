@@ -61,7 +61,7 @@ claude-switch [ARGS]
 
 ### 작업 디렉토리 처리
 
-`.vscode/settings.json` 또는 `.claude/settings.local.json`을 생성/수정하는 모든 동작(`claude-switch`, `--vscode`, `--vscode-clear`)은 실행 전 현재 디렉토리가 git 저장소인지 확인합니다.
+`.claude/settings.local.json`을 생성/수정하는 모든 동작(`claude-switch`, `--vscode`, `--vscode-clear`)은 실행 전 현재 디렉토리가 git 저장소인지 확인합니다.
 
 - git 저장소이면 최상위 디렉토리로 자동 이동한 뒤 작업을 수행합니다.
 - git으로 관리되지 않는 디렉토리이면 경고를 표시하고 계속 진행할지 `(y/N)` 확인을 받습니다. 엔터(기본 N)나 `n` 입력 시 중단됩니다.
@@ -72,20 +72,20 @@ claude-switch [ARGS]
 claude-switch --vscode
 ```
 
-계정을 선택하면 현재 디렉토리의 `.vscode/settings.json`에 토큰을 설정합니다. 기본적으로 토큰은 `CLAUDE_CODE_OAUTH_TOKEN`에 설정되며, `--aat` 옵션을 주면 `ANTHROPIC_AUTH_TOKEN`에 설정합니다.
+계정을 선택하면 현재 디렉토리의 `.claude/settings.local.json`의 `env` 객체에 토큰을 설정합니다. VSCode Claude Code 확장은 이 `env` 객체에서 환경변수를 읽습니다. 기본적으로 토큰은 `CLAUDE_CODE_OAUTH_TOKEN`에 설정되며, `--aat` 옵션을 주면 `ANTHROPIC_AUTH_TOKEN`에 설정합니다.
 
 ```json
 {
-  "claudeCode.environmentVariables": [
-    { "name": "ANTHROPIC_API_KEY", "value": "" },
-    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
-    { "name": "CLAUDE_CODE_OAUTH_NAME", "value": "personal" }
-  ]
+  "env": {
+    "ANTHROPIC_API_KEY": "",
+    "CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-XXX",
+    "CLAUDE_CODE_OAUTH_NAME": "personal"
+  }
 }
 ```
 
-- 파일이 없으면 새로 생성하고, 기존 설정은 유지합니다.
-- git 저장소에서 `.vscode/settings.json`이 `.gitignore`에 포함되지 않으면 경고를 표시합니다.
+- 파일이 없으면 새로 생성하고, 기존 설정(`env`의 다른 키, `hooks` 등)은 유지합니다.
+- git 저장소에서 `.claude/settings.local.json`이 `.gitignore`에 포함되지 않으면 `.gitignore`에 자동 추가합니다.
 
 `--proxy [HOST:]PORT`와 함께 사용하면 `ANTHROPIC_BASE_URL`도 함께 설정합니다:
 
@@ -95,12 +95,12 @@ claude-switch --vscode --proxy 8080
 
 ```json
 {
-  "claudeCode.environmentVariables": [
-    { "name": "ANTHROPIC_API_KEY", "value": "" },
-    { "name": "CLAUDE_CODE_OAUTH_TOKEN", "value": "sk-ant-oat01-XXX" },
-    { "name": "CLAUDE_CODE_OAUTH_NAME", "value": "personal" },
-    { "name": "ANTHROPIC_BASE_URL", "value": "http://localhost:8080" }
-  ]
+  "env": {
+    "ANTHROPIC_API_KEY": "",
+    "CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-XXX",
+    "CLAUDE_CODE_OAUTH_NAME": "personal",
+    "ANTHROPIC_BASE_URL": "http://localhost:8080"
+  }
 }
 ```
 
@@ -125,7 +125,7 @@ claude-switch --vscode --proxy 8080
 claude-switch --vscode-clear
 ```
 
-`.vscode/settings.json`에서 `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`을 제거합니다. 제거 후 환경변수가 남아있지 않으면 `claudeCode.environmentVariables` 항목도 함께 삭제합니다.
+`.claude/settings.local.json`의 `env`에서 `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`을 제거합니다. 사용자가 직접 추가한 다른 `env` 키는 유지하며, 제거 후 `env`가 비면 `env` 항목도 함께 삭제합니다.
 
 또한 `.claude/settings.local.json`에서 SessionStart 알림 hook도 함께 제거합니다.
 
@@ -191,7 +191,7 @@ export CLAUDE_CODE_OAUTH_TOKEN=$(claude-switch --get-token personal)
 claude-switch --aat
 ```
 
-`--aat` 옵션을 주면 토큰을 `ANTHROPIC_AUTH_TOKEN`에 설정합니다. 설정되는 값은 동일하며, 나머지 동작에는 차이가 없습니다. `--vscode`와 함께 사용하면 `.vscode/settings.json`의 토큰 변수에도 동일하게 적용됩니다.
+`--aat` 옵션을 주면 토큰을 `ANTHROPIC_AUTH_TOKEN`에 설정합니다. 설정되는 값은 동일하며, 나머지 동작에는 차이가 없습니다. `--vscode`와 함께 사용하면 `.claude/settings.local.json`의 `env` 토큰 변수에도 동일하게 적용됩니다.
 
 ### 도움말
 
