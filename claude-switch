@@ -420,9 +420,13 @@ def remove_session_start_hook():
         f.write("\n")
 
 
-def ensure_git_root_cwd():
+def ensure_git_root_cwd(stay_here=False):
     """현재 디렉토리가 git 저장소이면 최상위 디렉토리로 이동한다.
-    git 관리되지 않는 경우 경고 후 사용자 확인을 받는다."""
+    git 관리되지 않는 경우 경고 후 사용자 확인을 받는다.
+    stay_here가 True이면 디렉토리를 이동하지 않고 현재 디렉토리를 유지한다."""
+    if stay_here:
+        debug(f"ensure_git_root_cwd: --here 지정, 현재 디렉토리 유지 {os.getcwd()}")
+        return
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -487,6 +491,7 @@ def print_help():
     print("  --vscode-clear      .claude/settings.local.json의 env에서 토큰 정보를 제거합니다")
     print("  --proxy [HOST:]PORT ANTHROPIC_BASE_URL=http://[HOST:]PORT 를 설정합니다 (HOST 생략 시 localhost)")
     print("  --aat               토큰을 CLAUDE_CODE_OAUTH_TOKEN 대신 ANTHROPIC_AUTH_TOKEN 에 설정합니다")
+    print("  --here              git 최상위 디렉토리로 이동하지 않고 현재 디렉토리에서 실행합니다")
     print("  --debug             디버그 메시지를 출력합니다")
     print()
     print(f"토큰 파일: {TOKEN_FILE}")
@@ -503,7 +508,12 @@ def main():
     if use_aat:
         sys.argv.remove("--aat")
 
-    debug(f"main: argv={sys.argv} use_aat={use_aat}")
+    # --here: git 최상위 디렉토리로 이동하지 않고 현재 디렉토리 유지.
+    stay_here = "--here" in sys.argv
+    if stay_here:
+        sys.argv.remove("--here")
+
+    debug(f"main: argv={sys.argv} use_aat={use_aat} stay_here={stay_here}")
     debug(f"main: cwd={os.getcwd()}")
 
     # `--` 구분자 기준으로 claude-switch 옵션과 claude 전달 인자를 분리
@@ -578,7 +588,7 @@ def main():
     # --vscode: 계정 선택 후 .claude/settings.local.json의 env 업데이트
     if "--vscode" in own_argv:
         debug("main: --vscode 모드")
-        ensure_git_root_cwd()
+        ensure_git_root_cwd(stay_here)
         selected = select_account(names)
         print()
         print(f"선택: {names[selected]}")
@@ -600,7 +610,7 @@ def main():
     # --vscode-clear: .claude/settings.local.json의 env에서 토큰 제거
     if "--vscode-clear" in own_argv:
         debug("main: --vscode-clear 모드")
-        ensure_git_root_cwd()
+        ensure_git_root_cwd(stay_here)
         clear_local_settings_env()
         debug("main: remove_session_start_hook 호출")
         remove_session_start_hook()
@@ -608,7 +618,7 @@ def main():
 
     # 일반 모드: 계정 선택
     debug("main: 일반 모드")
-    ensure_git_root_cwd()
+    ensure_git_root_cwd(stay_here)
     sys.stdout.write("\033c")
     sys.stdout.flush()
     selected = select_account(names)

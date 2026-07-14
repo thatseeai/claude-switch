@@ -66,6 +66,21 @@ claude-switch [ARGS]
 - git 저장소이면 최상위 디렉토리로 자동 이동한 뒤 작업을 수행합니다.
 - git으로 관리되지 않는 디렉토리이면 경고를 표시하고 계속 진행할지 `(y/N)` 확인을 받습니다. 엔터(기본 N)나 `n` 입력 시 중단됩니다.
 
+일반 모드(`claude-switch`)에서는 계정 선택 후 현재 디렉토리(위 처리로 이동한 git 최상위)의 `.claude/settings.local.json`에 SessionStart 알림 hook을 추가한 뒤, 그 디렉토리에서 `claude`를 실행합니다. 따라서 하위 디렉토리에서 실행하더라도 기본적으로 git 최상위에서 `claude`가 시작됩니다.
+
+#### git 최상위로 이동하지 않기 (`--here`)
+
+```bash
+claude-switch --here
+```
+
+`--here` 옵션을 주면 git 최상위 디렉토리로 이동하지 않고 **현재 디렉토리를 그대로 유지**한 채 작업을 수행합니다. git 저장소의 하위 디렉토리에서 그 위치 그대로 `claude`를 실행하거나, 하위 디렉토리의 `.claude/settings.local.json`을 대상으로 삼고 싶을 때 사용합니다. 일반 모드뿐 아니라 `--vscode`, `--vscode-clear`와도 함께 사용할 수 있습니다.
+
+```bash
+claude-switch --here                # 현재 하위 디렉토리에서 claude 실행
+claude-switch --vscode --here       # 현재 하위 디렉토리의 settings.local.json에 토큰 설정
+```
+
 ### VSCode에 토큰 설정
 
 ```bash
@@ -192,6 +207,14 @@ claude-switch --aat
 ```
 
 `--aat` 옵션을 주면 토큰을 `ANTHROPIC_AUTH_TOKEN`에 설정합니다. 설정되는 값은 동일하며, 나머지 동작에는 차이가 없습니다. `--vscode`와 함께 사용하면 `.claude/settings.local.json`의 `env` 토큰 변수에도 동일하게 적용됩니다.
+
+### 현재 디렉토리 유지 (`--here`)
+
+```bash
+claude-switch --here
+```
+
+기본적으로 `claude-switch`는 git 최상위 디렉토리로 이동한 뒤 동작합니다. `--here` 옵션을 주면 디렉토리를 이동하지 않고 현재 디렉토리를 그대로 사용합니다. 자세한 내용은 [작업 디렉토리 처리](#작업-디렉토리-처리)를 참고하세요.
 
 ### 도움말
 
