@@ -59,6 +59,8 @@ claude-switch [ARGS]
 
 기본적으로 토큰은 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수에 설정됩니다. `--aat` 옵션을 주면 `ANTHROPIC_AUTH_TOKEN`에 설정합니다(값은 동일).
 
+> **주의:** 현재 Claude Code 버전은 `.claude/settings.local.json`의 `env`를 프로세스 환경변수보다 **우선**합니다. 따라서 이전에 `--vscode`로 토큰을 써둔 상태라면 일반 모드에서 다른 계정을 선택해도 무시될 수 있습니다. 이를 막기 위해 **일반 모드(`claude-switch` 단독 실행)는 실행 전 settings.local.json의 `env`에서 토큰 관련 변수 5개(`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`)를 자동으로 제거**합니다. 즉 CLI로 계정을 전환하면 그 디렉토리의 `--vscode`용 토큰 설정은 지워지므로, VSCode에서 다시 쓰려면 `--vscode`로 재설정하세요. (`env`의 다른 키와 `hooks`는 보존됩니다.)
+
 ### 작업 디렉토리 처리
 
 `.claude/settings.local.json`을 생성/수정하는 모든 동작(`claude-switch`, `--vscode`, `--vscode-clear`)은 실행 전 현재 디렉토리가 git 저장소인지 확인합니다.
@@ -215,6 +217,25 @@ claude-switch --here
 ```
 
 기본적으로 `claude-switch`는 git 최상위 디렉토리로 이동한 뒤 동작합니다. `--here` 옵션을 주면 디렉토리를 이동하지 않고 현재 디렉토리를 그대로 사용합니다. 자세한 내용은 [작업 디렉토리 처리](#작업-디렉토리-처리)를 참고하세요.
+
+### hook 프로그램 실행 (`--hook`)
+
+```bash
+claude-switch --hook ./prepare.sh
+claude-switch --vscode --hook prepare.sh
+```
+
+계정을 선택한 뒤, 다음 환경변수를 설정한 상태로 지정한 `PROGRAM`을 실행합니다.
+
+- `CS_CLAUDE_AUTH_NAME` — 선택한 계정 이름
+- `CS_CLAUDE_AUTH_TOKEN` — 선택한 계정 토큰
+
+`PROGRAM`은 `./prepare.sh`처럼 경로를 직접 지정하거나 `PATH`에 있는 실행 파일 이름으로 지정할 수 있습니다. 찾을 수 없거나 실행 권한이 없으면 에러로 종료합니다. `--here`를 쓰지 않으면 `claude-switch`는 git 최상위 디렉토리로 이동하지만, `PROGRAM`의 경로 해석과 실행 시 작업 디렉토리(cwd)는 **모두 명령을 실행한 원래 디렉토리(이동 전 위치)** 기준입니다.
+
+- **일반 모드**: 토큰 환경변수를 설정한 뒤 `PROGRAM`을 실행하고, 성공하면 이어서 `claude`를 실행합니다.
+- **`--vscode` 모드**: `.claude/settings.local.json`을 갱신한 뒤 `PROGRAM`을 실행합니다.
+
+`PROGRAM`이 0이 아닌 종료 코드로 끝나면 `claude` 실행/이후 동작을 진행하지 않고 그 코드로 종료(abort)합니다. `--hook`은 `--vscode` 모드와 일반(claude 실행) 모드에서만 동작하며, `--list`·`--get-token`·`--usages`·`--vscode-clear`와 함께 지정하면 에러로 거부합니다.
 
 ### 도움말
 

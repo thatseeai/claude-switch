@@ -4,6 +4,7 @@ import sys
 import tty
 import termios
 import json
+import shutil
 import subprocess
 import urllib.request
 import urllib.error
@@ -287,22 +288,35 @@ def update_local_settings_env(token, token_name, proxy_url=None, use_aat=False):
     print(".claude/settings.local.json 업데이트 완료")
 
 
-def clear_local_settings_env():
+def clear_local_settings_env(quiet=False):
+    """settings.local.json의 env에서 토큰 관련 변수 5개를 제거한다.
+
+    quiet=True이면 제거할 대상이 없을 때 아무것도 출력하지 않고, 실제로 제거한
+    경우에만 간단한 메시지를 출력한다. (일반 모드에서 settings.local.json이
+    환경변수보다 우선하는 것을 막기 위해 호출)
+    """
     settings_path = local_settings_path()
 
     if not os.path.isfile(settings_path):
-        print(".claude/settings.local.json 파일이 없습니다.")
+        if not quiet:
+            print(".claude/settings.local.json 파일이 없습니다.")
         return
 
     settings = load_json_file(settings_path)
 
     env = settings.get("env", {})
     if not isinstance(env, dict) or not env:
-        print("env 항목이 없습니다.")
+        if not quiet:
+            print("env 항목이 없습니다.")
         return
 
     remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_NAME", "ANTHROPIC_BASE_URL"}
-    for name in remove_names:
+    removed = [name for name in remove_names if name in env]
+    if not removed:
+        if not quiet:
+            print("env 항목이 없습니다.")
+        return
+    for name in removed:
         env.pop(name, None)
 
     if env:
@@ -314,7 +328,10 @@ def clear_local_settings_env():
         json.dump(settings, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
-    print(".claude/settings.local.json에서 토큰 정보를 제거했습니다.")
+    if quiet:
+        print("기존 .claude/settings.local.json의 토큰 정보를 제거했습니다 (환경변수 우선 적용).")
+    else:
+        print(".claude/settings.local.json에서 토큰 정보를 제거했습니다.")
 
 
 def update_session_start_hook():
@@ -479,6 +496,23 @@ def check_settings_local_gitignore():
 
 
 # ─── Main ────────────────────────────────────────────────────────────
+def run_hook(hook_path, name, token, cwd):
+    """CS_CLAUDE_AUTH_* 환경변수를 설정한 뒤 hook 프로그램을 실행한다.
+
+    cwd(claude-switch가 호출된 원래 디렉토리, git 최상위로 이동하기 전 위치)를
+    작업 디렉토리로 사용한다.
+    hook가 0이 아닌 종료 코드로 끝나면 에러를 출력하고 그 코드로 종료(abort)한다.
+    """
+    os.environ["CS_CLAUDE_AUTH_NAME"] = name
+    os.environ["CS_CLAUDE_AUTH_TOKEN"] = token
+    debug(f"run_hook: {hook_path} 실행 (cwd={cwd}, CS_CLAUDE_AUTH_NAME={name})")
+    result = subprocess.run([hook_path], cwd=cwd)
+    if result.returncode != 0:
+        print(f"오류: hook 프로그램이 종료 코드 {result.returncode}로 실패했습니다.",
+              file=sys.stderr)
+        sys.exit(result.returncode)
+
+
 def print_help():
     print("사용법: claude-switch [옵션] [-- claude 인자...]")
     print()
@@ -491,6 +525,8 @@ def print_help():
     print("  --vscode-clear      .claude/settings.local.json의 env에서 토큰 정보를 제거합니다")
     print("  --proxy [HOST:]PORT ANTHROPIC_BASE_URL=http://[HOST:]PORT 를 설정합니다 (HOST 생략 시 localhost)")
     print("  --aat               토큰을 CLAUDE_CODE_OAUTH_TOKEN 대신 ANTHROPIC_AUTH_TOKEN 에 설정합니다")
+    print("  --hook PROGRAM      환경변수(CS_CLAUDE_AUTH_NAME/CS_CLAUDE_AUTH_TOKEN) 설정 후 PROGRAM 실행")
+    print("                      (--vscode 또는 claude 실행 모드에서만 동작)")
     print("  --here              git 최상위 디렉토리로 이동하지 않고 현재 디렉토리에서 실행합니다")
     print("  --debug             디버그 메시지를 출력합니다")
     print()
@@ -553,6 +589,34 @@ def main():
             sys.exit(1)
         proxy_url = f"http://{host}:{int(port_str)}"
 
+    # --hook PROGRAM: 계정 선택 후 환경변수를 설정하고 실행할 프로그램 파싱/검증
+    # (상대 경로 해석과 실행 cwd 모두 사용자의 원래 위치 기준이 되도록
+    #  ensure_git_root_cwd가 cwd를 git 최상위로 바꾸기 전에 처리한다)
+    hook_path = None
+    hook_cwd = os.getcwd()
+    if "--hook" in own_argv:
+        idx = own_argv.index("--hook")
+        if idx + 1 >= len(own_argv) or own_argv[idx + 1].startswith("-"):
+            print("오류: --hook 옵션에 실행할 PROGRAM을 지정해야 합니다.", file=sys.stderr)
+            print("사용법: claude-switch --hook <PROGRAM>", file=sys.stderr)
+            sys.exit(1)
+        hook_program = own_argv[idx + 1]
+        resolved = shutil.which(hook_program)
+        if resolved is None:
+            print(f"오류: hook 프로그램을 찾을 수 없거나 실행 권한이 없습니다: {hook_program}",
+                  file=sys.stderr)
+            sys.exit(1)
+        hook_path = os.path.abspath(resolved)
+
+        # --hook은 --vscode 모드와 일반(claude 실행) 모드에서만 동작한다.
+        incompatible = {"--list", "--get-token", "--usages", "--vscode-clear"}
+        used_incompatible = incompatible & set(own_argv)
+        if used_incompatible:
+            print(f"오류: --hook은 {', '.join(sorted(used_incompatible))} 와 함께 사용할 수 없습니다."
+                  " (--vscode 또는 claude 실행 모드에서만 동작)", file=sys.stderr)
+            sys.exit(1)
+        debug(f"main: hook_path={hook_path}")
+
     names, tokens = load_tokens()
 
     # --list: 계정 이름 목록 출력 후 종료
@@ -605,6 +669,8 @@ def main():
         debug("main: update_session_start_hook 호출")
         update_session_start_hook()
         check_settings_local_gitignore()
+        if hook_path is not None:
+            run_hook(hook_path, names[selected], tokens[selected], hook_cwd)
         return
 
     # --vscode-clear: .claude/settings.local.json의 env에서 토큰 제거
@@ -634,15 +700,21 @@ def main():
     data = fetch_usage(tokens[selected])
     display_usage(names[selected], data)
 
+    # settings.local.json의 토큰 env 제거 (환경변수보다 우선하므로 선택 계정이 무시되는 것을 방지)
+    clear_local_settings_env(quiet=True)
+
     # SessionStart hook 추가
     debug("main: update_session_start_hook 호출")
     update_session_start_hook()
 
     # claude 실행
     # own_argv에서 claude-switch 전용 옵션을 제거하고, 나머지와 passthrough_argv를 합침
-    skip_args = {"--usages", "--proxy"}
-    proxy_idx = own_argv.index("--proxy") if "--proxy" in own_argv else -1
-    skip_idx = {proxy_idx + 1} if proxy_idx >= 0 else set()
+    value_flags = {"--proxy", "--hook"}
+    skip_args = {"--usages"} | value_flags
+    skip_idx = set()
+    for flag in value_flags:
+        if flag in own_argv:
+            skip_idx.add(own_argv.index(flag) + 1)
     own_claude_args = [a for i, a in enumerate(own_argv[1:], 1) if a not in skip_args and i not in skip_idx]
     claude_args = own_claude_args + passthrough_argv
     debug(f"main: claude_args={claude_args}")
@@ -653,6 +725,8 @@ def main():
     else:
         os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = tokens[selected]
     os.environ["CLAUDE_CODE_OAUTH_NAME"] = names[selected]
+    if hook_path is not None:
+        run_hook(hook_path, names[selected], tokens[selected], hook_cwd)
     os.execvp("claude", ["claude"] + claude_args)
 
 
