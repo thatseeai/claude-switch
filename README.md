@@ -180,6 +180,16 @@ claude-switch --usages
 - 리셋 시각 및 남은 시간
 - 전체 상태 (normal / warning / rate_limited)
 
+#### Charles 등 MITM 프록시를 시스템 프록시로 쓰는 경우
+
+Python은 macOS 시스템 프록시 설정은 따르지만 인증서 신뢰 저장소로는 키체인이 아니라
+자체 CA 번들을 사용하므로, Charles 같은 프록시가 TLS를 가로채면 인증서 검증에 실패합니다.
+claude-switch는 이 경우 macOS 키체인(시스템 루트 + System + login 키체인)의 인증서를
+신뢰 목록에 추가해 자동으로 한 번 더 시도하므로 별도 설정이 필요 없습니다.
+(Charles 루트 인증서가 키체인에 설치되어 있어야 합니다.)
+
+그래도 실패하면 사용량 대신 `조회 실패`와 원인이 표시됩니다. `--debug`로 원인을 확인할 수 있습니다.
+
 ### 등록된 계정 목록 확인
 
 ```bash

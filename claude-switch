@@ -5,6 +5,7 @@ import tty
 import termios
 import json
 import shutil
+import ssl
 import subprocess
 import urllib.request
 import urllib.error
@@ -41,6 +42,94 @@ def load_json_file(path):
 
 
 # ─── Usage ───────────────────────────────────────────────────────────
+def keychain_pem_blocks():
+    """macOS 키체인에 등록된 인증서들을 PEM 블록 리스트로 모아 반환한다.
+
+    Charles 같은 MITM 프록시의 루트 CA는 키체인에만 등록되므로, Python 기본
+    신뢰 저장소(OpenSSL/certifi)만으로는 검증에 실패한다.
+    """
+    keychains = [
+        "/System/Library/Keychains/SystemRootCertificates.keychain",
+        "/Library/Keychains/System.keychain",
+    ]
+    login = os.path.expanduser("~/Library/Keychains/login.keychain-db")
+    if os.path.exists(login):
+        keychains.append(login)
+
+    blocks = []
+    begin = "-----BEGIN CERTIFICATE-----"
+    end = "-----END CERTIFICATE-----"
+    for kc in keychains:
+        try:
+            result = subprocess.run(
+                ["security", "find-certificate", "-a", "-p", kc],
+                capture_output=True, text=True, timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            debug(f"keychain_pem_blocks: {kc} 조회 실패: {e}")
+            continue
+        if result.returncode != 0:
+            debug(f"keychain_pem_blocks: {kc} 조회 실패 (exit {result.returncode})")
+            continue
+        out = result.stdout
+        pos = 0
+        while True:
+            start = out.find(begin, pos)
+            if start < 0:
+                break
+            stop = out.find(end, start)
+            if stop < 0:
+                break
+            pos = stop + len(end)
+            blocks.append(out[start:pos] + "\n")
+    debug(f"keychain_pem_blocks: 인증서 {len(blocks)}개 수집")
+    return blocks
+
+
+_KEYCHAIN_CTX = "unset"
+
+
+def keychain_ssl_context():
+    """키체인 인증서를 신뢰 목록에 추가한 SSL 컨텍스트를 반환한다. 인증서가 없으면 None."""
+    global _KEYCHAIN_CTX
+    if _KEYCHAIN_CTX != "unset":
+        return _KEYCHAIN_CTX
+
+    blocks = keychain_pem_blocks()
+    if not blocks:
+        _KEYCHAIN_CTX = None
+        return None
+
+    ctx = ssl.create_default_context()
+    loaded = 0
+    for pem in blocks:
+        # 키체인에는 OpenSSL이 거부하는 인증서도 섞여 있을 수 있어 하나씩 넣는다.
+        try:
+            ctx.load_verify_locations(cadata=pem)
+            loaded += 1
+        except ssl.SSLError as e:
+            debug(f"keychain_ssl_context: 인증서 1개 건너뜀: {e}")
+    debug(f"keychain_ssl_context: 인증서 {loaded}개 로드")
+    _KEYCHAIN_CTX = ctx if loaded else None
+    return _KEYCHAIN_CTX
+
+
+def api_urlopen(req):
+    """API 요청을 보낸다. 인증서 검증에 실패하면 키체인 인증서로 한 번 더 시도한다."""
+    try:
+        return urllib.request.urlopen(req)
+    except urllib.error.HTTPError:
+        raise
+    except urllib.error.URLError as e:
+        if not isinstance(e.reason, ssl.SSLCertVerificationError) or sys.platform != "darwin":
+            raise
+        debug(f"api_urlopen: 인증서 검증 실패 ({e.reason}), 키체인 인증서로 재시도")
+        ctx = keychain_ssl_context()
+        if ctx is None:
+            raise
+        return urllib.request.urlopen(req, context=ctx)
+
+
 def fetch_usage(token):
     body = json.dumps({
         "model": "claude-haiku-4-5-20251001",
@@ -56,12 +145,14 @@ def fetch_usage(token):
     })
 
     try:
-        resp = urllib.request.urlopen(req)
+        resp = api_urlopen(req)
         headers = resp.headers
     except urllib.error.HTTPError as e:
         if e.code == 401:
             return None
         headers = e.headers
+    except urllib.error.URLError as e:
+        return {"error": str(e.reason)}
 
     prefix = "anthropic-ratelimit-"
     rl_headers = {k: v for k, v in headers.items() if k.lower().startswith(prefix)}
@@ -133,6 +224,10 @@ def display_usage(name, data):
 
     if data is None:
         print(f"  {bold}{name}{reset}: \033[31mtoken expired\033[0m")
+        return
+
+    if "error" in data:
+        print(f"  {bold}{name}{reset}: \033[31m조회 실패\033[0m {dim}{data['error']}{reset}")
         return
 
     status = data["overall_status"]
