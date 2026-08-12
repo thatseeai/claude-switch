@@ -59,7 +59,7 @@ claude-switch [ARGS]
 
 기본적으로 토큰은 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수에 설정됩니다. `--aat` 옵션을 주면 `ANTHROPIC_AUTH_TOKEN`에 설정합니다(값은 동일).
 
-> **주의:** 현재 Claude Code 버전은 `.claude/settings.local.json`의 `env`를 프로세스 환경변수보다 **우선**합니다. 따라서 이전에 `--vscode`로 토큰을 써둔 상태라면 일반 모드에서 다른 계정을 선택해도 무시될 수 있습니다. 이를 막기 위해 **일반 모드(`claude-switch` 단독 실행)는 실행 전 settings.local.json의 `env`에서 토큰 관련 변수 5개(`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`)를 자동으로 제거**합니다. 즉 CLI로 계정을 전환하면 그 디렉토리의 `--vscode`용 토큰 설정은 지워지므로, VSCode에서 다시 쓰려면 `--vscode`로 재설정하세요. (`env`의 다른 키와 `hooks`는 보존됩니다.)
+> **주의:** 현재 Claude Code 버전은 `.claude/settings.local.json`의 `env`를 프로세스 환경변수보다 **우선**합니다. 따라서 이전에 `--vscode`로 토큰을 써둔 상태라면 일반 모드에서 다른 계정을 선택해도 무시될 수 있습니다. 이를 막기 위해 **일반 모드(`claude-switch` 단독 실행)는 실행 전 settings.local.json의 `env`에서 토큰·프록시 관련 변수 6개(`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`, `HTTPS_PROXY`)를 자동으로 제거**합니다. 즉 CLI로 계정을 전환하면 그 디렉토리의 `--vscode`용 토큰 설정은 지워지므로, VSCode에서 다시 쓰려면 `--vscode`로 재설정하세요. (`env`의 다른 키와 `hooks`는 보존됩니다.)
 
 ### 작업 디렉토리 처리
 
@@ -142,11 +142,15 @@ claude-switch --vscode --proxy 8080
 claude-switch --vscode-clear
 ```
 
-`.claude/settings.local.json`의 `env`에서 `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`을 제거합니다. 사용자가 직접 추가한 다른 `env` 키는 유지하며, 제거 후 `env`가 비면 `env` 항목도 함께 삭제합니다.
+`.claude/settings.local.json`의 `env`에서 `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_NAME`, `ANTHROPIC_BASE_URL`, `HTTPS_PROXY`를 제거합니다. 사용자가 직접 추가한 다른 `env` 키는 유지하며, 제거 후 `env`가 비면 `env` 항목도 함께 삭제합니다.
 
 또한 `.claude/settings.local.json`에서 SessionStart 알림 hook도 함께 제거합니다.
 
 ### 프록시 설정
+
+프록시 모드는 두 가지가 있고, **둘 중 하나만** 지정할 수 있습니다. 함께 지정하면 에러로 종료합니다.
+
+#### API 엔드포인트 교체 (`--proxy`)
 
 ```bash
 claude-switch --proxy [HOST:]PORT
@@ -163,6 +167,25 @@ claude-switch --proxy 192.168.2.12:3000 # http://192.168.2.12:3000
 
 ```bash
 claude-switch --vscode --proxy 8080
+```
+
+#### HTTPS 프록시 경유 (`--https-proxy`)
+
+```bash
+claude-switch --https-proxy URL
+```
+
+`HTTPS_PROXY=URL` 환경변수를 설정한 뒤 `claude`를 실행합니다. API 엔드포인트는 그대로 두고 요청만 프록시를 경유시킵니다(Charles 등 MITM 프록시로 트래픽을 볼 때 사용). 포트 번호만 지정하면 `http://127.0.0.1:PORT`로 확장합니다.
+
+```bash
+claude-switch --https-proxy http://127.0.0.1:3002  # 그대로 사용
+claude-switch --https-proxy 3002                   # http://127.0.0.1:3002
+```
+
+`--vscode`와 함께 쓰면 `.claude/settings.local.json`의 `env`에 `HTTPS_PROXY`를 설정합니다:
+
+```bash
+claude-switch --vscode --https-proxy 3002
 ```
 
 

@@ -339,7 +339,7 @@ def select_account(names):
 
 
 # ─── 로컬 설정 env ───────────────────────────────────────────────────
-def update_local_settings_env(token, token_name, proxy_url=None, use_aat=False):
+def update_local_settings_env(token, token_name, proxy_url=None, use_aat=False, https_proxy=None):
     """현재 작업 디렉토리의 .claude/settings.local.json의 env 객체에 토큰 환경변수를 설정한다.
     VSCode Claude Code 확장은 이 env 객체에서 환경변수를 읽는다."""
     settings_path = local_settings_path()
@@ -374,6 +374,12 @@ def update_local_settings_env(token, token_name, proxy_url=None, use_aat=False):
     else:
         env.pop("ANTHROPIC_BASE_URL", None)
 
+    # HTTPS_PROXY: https_proxy가 지정된 경우에만 설정, 없으면 제거
+    if https_proxy is not None:
+        env["HTTPS_PROXY"] = https_proxy
+    else:
+        env.pop("HTTPS_PROXY", None)
+
     settings["env"] = env
 
     with open(settings_path, "w") as f:
@@ -384,7 +390,7 @@ def update_local_settings_env(token, token_name, proxy_url=None, use_aat=False):
 
 
 def clear_local_settings_env(quiet=False):
-    """settings.local.json의 env에서 토큰 관련 변수 5개를 제거한다.
+    """settings.local.json의 env에서 토큰/프록시 관련 변수를 제거한다.
 
     quiet=True이면 제거할 대상이 없을 때 아무것도 출력하지 않고, 실제로 제거한
     경우에만 간단한 메시지를 출력한다. (일반 모드에서 settings.local.json이
@@ -405,7 +411,7 @@ def clear_local_settings_env(quiet=False):
             print("env 항목이 없습니다.")
         return
 
-    remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_NAME", "ANTHROPIC_BASE_URL"}
+    remove_names = {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_NAME", "ANTHROPIC_BASE_URL", "HTTPS_PROXY"}
     removed = [name for name in remove_names if name in env]
     if not removed:
         if not quiet:
@@ -619,6 +625,8 @@ def print_help():
     print("  --vscode            선택한 계정의 토큰을 .claude/settings.local.json의 env에 설정합니다")
     print("  --vscode-clear      .claude/settings.local.json의 env에서 토큰 정보를 제거합니다")
     print("  --proxy [HOST:]PORT ANTHROPIC_BASE_URL=http://[HOST:]PORT 를 설정합니다 (HOST 생략 시 localhost)")
+    print("  --https-proxy URL   HTTPS_PROXY=URL 을 설정합니다 (PORT만 지정 시 http://127.0.0.1:PORT)")
+    print("                      (--proxy 와 함께 사용할 수 없습니다)")
     print("  --aat               토큰을 CLAUDE_CODE_OAUTH_TOKEN 대신 ANTHROPIC_AUTH_TOKEN 에 설정합니다")
     print("  --hook PROGRAM      환경변수(CS_CLAUDE_AUTH_NAME/CS_CLAUDE_AUTH_TOKEN) 설정 후 PROGRAM 실행")
     print("                      (--vscode 또는 claude 실행 모드에서만 동작)")
@@ -662,6 +670,12 @@ def main():
         print_help()
         return
 
+    # --proxy와 --https-proxy는 동시에 지정할 수 없다 (하나만 허용)
+    if "--proxy" in own_argv and "--https-proxy" in own_argv:
+        print("오류: --proxy 와 --https-proxy 는 함께 사용할 수 없습니다. 하나만 지정하세요.",
+              file=sys.stderr)
+        sys.exit(1)
+
     # --proxy [HOST:]PORT: ANTHROPIC_BASE_URL 설정용 호스트/포트 파싱
     proxy_url = None
     if "--proxy" in own_argv:
@@ -683,6 +697,25 @@ def main():
             print(f"오류: 포트 번호가 올바르지 않습니다: {port_str}", file=sys.stderr)
             sys.exit(1)
         proxy_url = f"http://{host}:{int(port_str)}"
+
+    # --https-proxy URL: HTTPS_PROXY 설정값 파싱 (포트 번호만 주면 http://127.0.0.1:PORT)
+    https_proxy = None
+    if "--https-proxy" in own_argv:
+        idx = own_argv.index("--https-proxy")
+        if idx + 1 >= len(own_argv) or own_argv[idx + 1].startswith("-"):
+            print("오류: --https-proxy 옵션에 URL 또는 PORT를 지정해야 합니다.", file=sys.stderr)
+            print("사용법: claude-switch --https-proxy <URL|PORT>", file=sys.stderr)
+            sys.exit(1)
+        target = own_argv[idx + 1]
+        if target.isdigit():
+            https_proxy = f"http://127.0.0.1:{int(target)}"
+        elif "://" in target:
+            https_proxy = target
+        else:
+            print(f"오류: URL 또는 포트 번호가 올바르지 않습니다: {target}", file=sys.stderr)
+            print("예: --https-proxy http://127.0.0.1:3002 또는 --https-proxy 3002", file=sys.stderr)
+            sys.exit(1)
+        debug(f"main: https_proxy={https_proxy}")
 
     # --hook PROGRAM: 계정 선택 후 환경변수를 설정하고 실행할 프로그램 파싱/검증
     # (상대 경로 해석과 실행 cwd 모두 사용자의 원래 위치 기준이 되도록
@@ -760,7 +793,7 @@ def main():
         data = fetch_usage(tokens[selected])
         display_usage(names[selected], data)
 
-        update_local_settings_env(tokens[selected], names[selected], proxy_url, use_aat)
+        update_local_settings_env(tokens[selected], names[selected], proxy_url, use_aat, https_proxy)
         debug("main: update_session_start_hook 호출")
         update_session_start_hook()
         check_settings_local_gitignore()
@@ -804,7 +837,7 @@ def main():
 
     # claude 실행
     # own_argv에서 claude-switch 전용 옵션을 제거하고, 나머지와 passthrough_argv를 합침
-    value_flags = {"--proxy", "--hook"}
+    value_flags = {"--proxy", "--https-proxy", "--hook"}
     skip_args = {"--usages"} | value_flags
     skip_idx = set()
     for flag in value_flags:
@@ -815,6 +848,8 @@ def main():
     debug(f"main: claude_args={claude_args}")
     if proxy_url is not None:
         os.environ["ANTHROPIC_BASE_URL"] = proxy_url
+    if https_proxy is not None:
+        os.environ["HTTPS_PROXY"] = https_proxy
     if use_aat:
         os.environ["ANTHROPIC_AUTH_TOKEN"] = tokens[selected]
     else:
