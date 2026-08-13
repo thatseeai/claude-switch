@@ -52,10 +52,23 @@ team sk-ant-zzzzz
 ### 계정 선택 후 Claude 실행
 
 ```bash
-claude-switch [ARGS]
+claude-switch [옵션] [-- claude 인자...]
 ```
 
-↑↓ 키로 계정을 선택하면 해당 계정의 API 사용량을 표시한 뒤 `claude [ARGS]`를 실행합니다.
+↑↓ 키로 계정을 선택하면 해당 계정의 API 사용량을 표시한 뒤 `claude`를 실행합니다.
+
+`--` 뒤에 쓴 인자는 그대로 `claude`에 전달됩니다.
+
+```bash
+claude-switch --aat -- --model opus -c
+# → 계정 선택 후 claude --model opus -c 실행
+```
+
+#### 옵션 검증
+
+`--` **앞에는 claude-switch 자체 옵션만 올 수 있습니다.** 모르는 옵션이나 인자가 있으면 계정 선택·사용량 조회를 시작하기 전에 즉시 에러로 중단합니다. 오타로 보이면 후보도 함께 알려줍니다.
+
+따라서 `claude` 옵션은 `--` 없이 쓸 수 없습니다. `claude-switch -c`가 아니라 `claude-switch -- -c`로 실행하세요.
 
 기본적으로 토큰은 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수에 설정됩니다. `--aat` 옵션을 주면 `ANTHROPIC_AUTH_TOKEN`에 설정합니다(값은 동일).
 
